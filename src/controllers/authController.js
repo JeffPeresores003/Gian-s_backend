@@ -5,11 +5,12 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const logger = require('../config/logger');
 
+const isProduction = process.env.NODE_ENV === 'production';
 const COOKIE_NAME = 'adminToken';
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.COOKIE_SECURE === 'true',
-  sameSite: 'strict',
+  secure: isProduction || process.env.COOKIE_SECURE === 'true',
+  sameSite: isProduction ? 'none' : 'lax',
   maxAge: 8 * 60 * 60 * 1000, // 8 hours
 };
 
@@ -67,7 +68,7 @@ const login = async (req, res, next) => {
  * Clears the auth cookie.
  */
 const logout = (req, res) => {
-  res.clearCookie(COOKIE_NAME, { httpOnly: true, sameSite: 'strict' });
+  res.clearCookie(COOKIE_NAME, COOKIE_OPTIONS);
   return res.status(200).json({ message: 'Logged out successfully.' });
 };
 

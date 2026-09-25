@@ -19,10 +19,13 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
+// ─── Trust reverse proxy (Render, Cloudflare, etc.) ──────────────────────────
+app.set('trust proxy', 1);
+
 // ─── Security headers ────────────────────────────────────────────────────────
 app.use(helmet());
 
-// ─── CORS — strict allowlist ─────────────────────────────────────────────────
+// ─── CORS ────────────────────────────────────────────────────────────────────
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((o) => o.trim())
@@ -31,15 +34,47 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow non-browser tools in development (e.g. Postman) when no origin header
-      if (!origin && process.env.NODE_ENV !== 'production') return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // 1. Allow direct browser navigation, server-to-server, curl, and health checks (no origin header)
+      if (!origin) return callback(null, true);
+
+      // 2. Allow if wildcard or explicitly in allowed list
+      if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // 3. Allow localhost in non-production
+      if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      // 4. Allow any onrender.com origin if deployed on Render
+      if (/\.onrender\.com$/.test(origin)) {
+        return callback(null, true);
+      }
+
       logger.warn('CORS blocked origin', { origin });
-      callback(new Error('Not allowed by CORS'));
+      const corsErr = new Error('Not allowed by CORS policy');
+      corsErr.statusCode = 403;
+      callback(corsErr);
     },
     credentials: true,
   })
 );
+
+// ─── Root & Health check routes ──────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    status: 'online',
+    service: "Gian's Cafe & Foodhouse API",
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    endpoints: {
+      health: '/api/health',
+      products: '/api/products',
+      categories: '/api/categories',
+    },
+  });
+});
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 app.use(
