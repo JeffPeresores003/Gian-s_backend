@@ -15,8 +15,8 @@ const uploadImage = (req, res, next) => {
       return res.status(400).json({ message: 'No image file provided.' });
     }
 
-    // Build the public URL (served from /uploads/* via Express static)
-    const imageUrl = `/uploads/${req.file.filename}`;
+    // Use the API host because the frontend and backend are deployed separately.
+    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
     logger.info('Image uploaded', { filename: req.file.filename });
 
     return res.status(200).json({ image_url: imageUrl, filename: req.file.filename });
