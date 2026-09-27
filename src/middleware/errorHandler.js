@@ -1,5 +1,6 @@
 'use strict';
 
+const multer = require('multer');
 const logger = require('../config/logger');
 
 /**
@@ -8,7 +9,7 @@ const logger = require('../config/logger');
  */
 // eslint-disable-next-line no-unused-vars
 const errorHandler = (err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
+  const statusCode = err.statusCode || (err instanceof multer.MulterError ? 400 : 500);
 
   logger.error('Unhandled error', {
     message: err.message,
