@@ -12,18 +12,15 @@ const { authenticate, requireRole } = require('../middleware/auth');
 
 const router = Router();
 
-// Authentication required
-router.use(authenticate);
-
 // View stocks (accessible by both admin & cashier)
-router.get('/admin/inventory', getStocks);
+router.get('/admin/inventory', authenticate, getStocks);
 
 // Quick adjust (+/-)
-router.patch('/admin/inventory/:id/adjust', adjustStock);
+router.patch('/admin/inventory/:id/adjust', authenticate, adjustStock);
 
 // Admin-only mutation: create, update, delete
-router.post('/admin/inventory', requireRole('admin'), createStock);
-router.put('/admin/inventory/:id', requireRole('admin'), updateStock);
-router.delete('/admin/inventory/:id', requireRole('admin'), deleteStock);
+router.post('/admin/inventory', authenticate, requireRole('admin'), createStock);
+router.put('/admin/inventory/:id', authenticate, requireRole('admin'), updateStock);
+router.delete('/admin/inventory/:id', authenticate, requireRole('admin'), deleteStock);
 
 module.exports = router;

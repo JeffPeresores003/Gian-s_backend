@@ -57,6 +57,12 @@ const login = async (req, res, next) => {
       message: 'Login successful.',
       role: userRole,
       username: admin.username,
+      token,
+      user: {
+        id: admin.id,
+        username: admin.username,
+        role: userRole,
+      },
     });
   } catch (err) {
     next(err);

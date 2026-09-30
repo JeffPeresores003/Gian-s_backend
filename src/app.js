@@ -15,6 +15,7 @@ const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
+const onlineOrderRoutes = require('./routes/onlineOrderRoutes');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -117,6 +118,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api', productRoutes);
+app.use('/api', onlineOrderRoutes);
 app.use('/api', orderRoutes);
 app.use('/api', inventoryRoutes);
 

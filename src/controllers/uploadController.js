@@ -15,11 +15,28 @@ const uploadImage = (req, res, next) => {
       return res.status(400).json({ message: 'No image file provided.' });
     }
 
-    // Use the API host because the frontend and backend are deployed separately.
+    // Use the API host for local file reference
     const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+
+    // Read image buffer to generate a permanent base64 data URI
+    // This ensures product images are stored safely inside Hostinger MySQL (MEDIUMTEXT)
+    // and never disappear when cloud hosts (like Render) restart or wipe ephemeral disks.
+    let persistentDataUrl = imageUrl;
+    try {
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const mimeType = req.file.mimetype || 'image/jpeg';
+      persistentDataUrl = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+    } catch (e) {
+      logger.warn('Could not read uploaded file to base64, using relative URL', { error: e.message });
+    }
+
     logger.info('Image uploaded', { filename: req.file.filename });
 
-    return res.status(200).json({ image_url: imageUrl, filename: req.file.filename });
+    return res.status(200).json({
+      image_url: persistentDataUrl,
+      local_url: imageUrl,
+      filename: req.file.filename,
+    });
   } catch (err) {
     next(err);
   }

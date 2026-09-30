@@ -38,7 +38,15 @@ router.post(
     body('name').trim().notEmpty().withMessage('Name is required.'),
     body('price').isFloat({ min: 0 }).withMessage('Price must be a non-negative number.'),
     body('category').trim().notEmpty().withMessage('Category is required.'),
-    body('image_url').optional({ nullable: true }).isURL().withMessage('Invalid image URL.'),
+    body('image_url')
+      .optional({ nullable: true })
+      .custom((val) => {
+        if (!val) return true;
+        if (typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:image/') || val.startsWith('/uploads/'))) {
+          return true;
+        }
+        throw new Error('Image URL must start with http://, https://, or be a data image.');
+      }),
   ],
   createProduct
 );
@@ -52,7 +60,15 @@ router.put(
     body('name').trim().notEmpty().withMessage('Name is required.'),
     body('price').isFloat({ min: 0 }).withMessage('Price must be a non-negative number.'),
     body('category').trim().notEmpty().withMessage('Category is required.'),
-    body('image_url').optional({ nullable: true }).isURL().withMessage('Invalid image URL.'),
+    body('image_url')
+      .optional({ nullable: true })
+      .custom((val) => {
+        if (!val) return true;
+        if (typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:image/') || val.startsWith('/uploads/'))) {
+          return true;
+        }
+        throw new Error('Image URL must start with http://, https://, or be a data image.');
+      }),
   ],
   updateProduct
 );

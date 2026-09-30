@@ -11,15 +11,12 @@ const { authenticate } = require('../middleware/auth');
 
 const router = Router();
 
-// All order & sales reporting routes require authenticated user (cashier or admin)
-router.use(authenticate);
-
 // Reports
-router.get('/reports/sales', getSalesReport);
+router.get('/reports/sales', authenticate, getSalesReport);
 
 // Orders CRUD
-router.post('/orders', createOrder);
-router.get('/orders', getOrders);
-router.get('/orders/:id', getOrderDetails);
+router.post('/orders', authenticate, createOrder);
+router.get('/orders', authenticate, getOrders);
+router.get('/orders/:id', authenticate, getOrderDetails);
 
 module.exports = router;
