@@ -22,6 +22,8 @@ const pool = mysql.createPool({
     const conn = await pool.getConnection();
     logger.info('MySQL connection pool established.');
     conn.release();
+    // Apply idempotent upgrades (refund / edit columns + audit log)
+    await require('./ensureSchema')(pool);
   } catch (err) {
     logger.error('Failed to establish MySQL connection pool', { error: err.message });
     process.exit(1);

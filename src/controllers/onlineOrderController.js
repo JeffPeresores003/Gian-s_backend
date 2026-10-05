@@ -12,7 +12,7 @@ const placeOnlineOrder = async (req, res, next) => {
       customer_name,
       contact_number,
       delivery_address,
-      delivery_fee = 50.00,
+      delivery_fee = 0.00,
       items,
       total_amount,
       notes = null,
@@ -36,7 +36,7 @@ const placeOnlineOrder = async (req, res, next) => {
       return res.status(400).json({ message: 'Invalid total amount.' });
     }
 
-    const fee = !isNaN(parseFloat(delivery_fee)) ? parseFloat(delivery_fee) : 50.00;
+    const fee = !isNaN(parseFloat(delivery_fee)) ? parseFloat(delivery_fee) : 0.00;
 
     // 1. Create order header via stored procedure (6 parameters: name, contact, address, delivery_fee, total, notes)
     const [orderRows] = await pool.execute(
@@ -319,7 +319,7 @@ const markToDeliver = async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 const verifyQR = async (req, res, next) => {
   try {
-    const query = (
+    let query = (
       req.body.query ||
       req.body.search ||
       req.body.qr_token ||
@@ -331,6 +331,19 @@ const verifyQR = async (req, res, next) => {
     if (!query) {
       return res.status(400).json({ message: 'QR token, OTN code, or customer name is required.' });
     }
+
+    // Smart parse QR payloads (JSON objects, URLs, tokens)
+    try {
+      if (query.startsWith('{') && query.endsWith('}')) {
+        const parsed = JSON.parse(query);
+        query = (parsed.qr_token || parsed.order_number || parsed.otn || parsed.id || query).toString().trim();
+      } else if (query.includes('/track/')) {
+        query = query.split('/track/').pop().split(/[?#]/)[0].trim();
+      } else if (query.includes('token=')) {
+        const match = query.match(/token=([^&]+)/);
+        if (match) query = decodeURIComponent(match[1]).trim();
+      }
+    } catch {}
 
     const [results] = await pool.execute('CALL sp_VerifyQRToken(?)', [query]);
     const order = results[0]?.[0];
