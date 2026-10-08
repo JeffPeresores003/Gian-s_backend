@@ -6,6 +6,7 @@ const {
   getOrders,
   getOrderDetails,
   getSalesReport,
+  getDistributionReport,
 } = require('../controllers/orderController');
 const {
   listOrders: adminListOrders,
@@ -19,6 +20,7 @@ const router = Router();
 
 // Reports (cashier + admin)
 router.get('/reports/sales', authenticate, getSalesReport);
+router.get('/reports/distribution', authenticate, getDistributionReport);
 
 // Orders CRUD (cashier + admin)
 router.post('/orders', authenticate, createOrder);

@@ -24,7 +24,76 @@ const ORDER_COLUMNS = [
 
 const state = { ready: false };
 
+const ensureProductFlavors = async (pool) => {
+  try {
+    const [cols] = await pool.query(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'flavors'`
+    );
+    if (!cols.length) {
+      const [t] = await pool.query(
+        `SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products'`
+      );
+      if (t.length) {
+        // JSON array of { name, available } objects stored as text (MySQL/MariaDB safe)
+        await pool.query('ALTER TABLE products ADD COLUMN `flavors` TEXT NULL');
+        logger.info('ensureSchema: added products.flavors');
+      }
+    }
+  } catch (err) {
+    logger.error('ensureSchema: failed to add products.flavors', { error: err.message });
+  }
+};
+
+const ensureProductCostPrice = async (pool) => {
+  try {
+    const [cols] = await pool.query(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'cost_price'`
+    );
+    if (!cols.length) {
+      const [t] = await pool.query(
+        `SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products'`
+      );
+      if (t.length) {
+        await pool.query('ALTER TABLE products ADD COLUMN `cost_price` DECIMAL(10, 2) NOT NULL DEFAULT 0.00');
+        logger.info('ensureSchema: added products.cost_price');
+      }
+    }
+  } catch (err) {
+    logger.error('ensureSchema: failed to add products.cost_price', { error: err.message });
+  }
+};
+
+const ensureReportIndexes = async (pool) => {
+  try {
+    const [indexes] = await pool.query(
+      `SELECT INDEX_NAME, TABLE_NAME FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('orders', 'order_items')`
+    );
+    const existing = new Set(indexes.map((i) => `${i.TABLE_NAME}.${i.INDEX_NAME}`));
+
+    if (!existing.has('orders.idx_orders_created_at')) {
+      await pool.query('ALTER TABLE orders ADD INDEX idx_orders_created_at (created_at)');
+      logger.info('ensureSchema: added idx_orders_created_at');
+    }
+    if (!existing.has('orders.idx_orders_created_status')) {
+      await pool.query('ALTER TABLE orders ADD INDEX idx_orders_created_status (created_at, status)');
+      logger.info('ensureSchema: added idx_orders_created_status');
+    }
+    if (!existing.has('order_items.idx_order_items_product_id')) {
+      await pool.query('ALTER TABLE order_items ADD INDEX idx_order_items_product_id (product_id)');
+      logger.info('ensureSchema: added idx_order_items_product_id');
+    }
+  } catch (err) {
+    logger.warn('ensureSchema: failed to ensure performance indexes', { error: err.message });
+  }
+};
+
 const ensureSchema = async (pool) => {
+  await ensureProductFlavors(pool);
+  await ensureProductCostPrice(pool);
+  await ensureReportIndexes(pool);
   try {
     const [cols] = await pool.query(
       `SELECT COLUMN_NAME FROM information_schema.COLUMNS

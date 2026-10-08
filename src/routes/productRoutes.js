@@ -7,6 +7,7 @@ const {
   getAllProducts,
   createProduct,
   updateProduct,
+  updatePricing,
   toggleAvailability,
   deleteProduct,
   getCategories,
@@ -38,6 +39,7 @@ router.post(
     body('name').trim().notEmpty().withMessage('Name is required.'),
     body('price').isFloat({ min: 0 }).withMessage('Price must be a non-negative number.'),
     body('category').trim().notEmpty().withMessage('Category is required.'),
+    body('cost_price').optional().isFloat({ min: 0 }).withMessage('Cost price must be non-negative.'),
     body('image_url')
       .optional({ nullable: true })
       .custom((val) => {
@@ -60,6 +62,7 @@ router.put(
     body('name').trim().notEmpty().withMessage('Name is required.'),
     body('price').isFloat({ min: 0 }).withMessage('Price must be a non-negative number.'),
     body('category').trim().notEmpty().withMessage('Category is required.'),
+    body('cost_price').optional().isFloat({ min: 0 }).withMessage('Cost price must be non-negative.'),
     body('image_url')
       .optional({ nullable: true })
       .custom((val) => {
@@ -71,6 +74,18 @@ router.put(
       }),
   ],
   updateProduct
+);
+
+// PATCH /api/admin/products/:id/pricing
+router.patch(
+  '/admin/products/:id/pricing',
+  authenticate,
+  [
+    param('id').isInt({ min: 1 }).withMessage('Invalid product ID.'),
+    body('cost_price').optional().isFloat({ min: 0 }).withMessage('cost_price must be >= 0'),
+    body('price').optional().isFloat({ min: 0 }).withMessage('price must be >= 0'),
+  ],
+  updatePricing
 );
 
 // PATCH /api/admin/products/:id/availability

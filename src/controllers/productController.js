@@ -3,6 +3,69 @@
 const pool = require('../config/db');
 const logger = require('../config/logger');
 
+/** Normalise incoming flavors into [{ name, available }] (deduped, trimmed). */
+const normalizeFlavors = (input) => {
+  let list = input;
+  if (typeof list === 'string') {
+    try { list = JSON.parse(list); } catch { list = []; }
+  }
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const f of list) {
+    const name = String(typeof f === 'string' ? f : f?.name ?? '').trim().slice(0, 50);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push({ name, available: typeof f === 'object' && f.available !== undefined ? Boolean(f.available) : true });
+  }
+  return out;
+};
+
+const saveFlavors = async (id, flavors) => {
+  const list = normalizeFlavors(flavors);
+  await pool.query('UPDATE products SET flavors = ? WHERE id = ?', [
+    list.length ? JSON.stringify(list) : null,
+    id,
+  ]);
+};
+
+const saveCostPrice = async (id, cost_price) => {
+  const cp = Math.max(0, parseFloat(cost_price) || 0);
+  await pool.query('UPDATE products SET cost_price = ? WHERE id = ?', [cp, id]);
+};
+
+/** Attach parsed `flavors` arrays and `cost_price` to product rows. */
+const attachFlavors = async (products) => {
+  if (!products?.length) return products || [];
+  try {
+    const [rows] = await pool.query('SELECT id, flavors, cost_price FROM products');
+    const map = new Map(
+      rows.map((r) => [
+        r.id,
+        {
+          flavors: normalizeFlavors(r.flavors),
+          cost_price: parseFloat(r.cost_price || 0),
+        },
+      ])
+    );
+    return products.map((p) => {
+      const meta = map.get(p.id);
+      return {
+        ...p,
+        cost_price: meta ? meta.cost_price : parseFloat(p.cost_price || 0),
+        flavors: meta ? meta.flavors : [],
+      };
+    });
+  } catch (err) {
+    logger.warn('attachFlavors failed', { error: err.message });
+    return products.map((p) => ({
+      ...p,
+      cost_price: parseFloat(p.cost_price || 0),
+      flavors: [],
+    }));
+  }
+};
+
 /**
  * GET /api/products
  * Public — returns only available products.
@@ -19,7 +82,7 @@ const getPublicProducts = async (req, res, next) => {
       maxPrice != null ? parseFloat(maxPrice) : null,
     ]);
 
-    return res.status(200).json({ products: rows[0] });
+    return res.status(200).json({ products: await attachFlavors(rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -32,7 +95,7 @@ const getPublicProducts = async (req, res, next) => {
 const getAllProducts = async (req, res, next) => {
   try {
     const [rows] = await pool.execute('CALL sp_GetAllProducts()');
-    return res.status(200).json({ products: rows[0] });
+    return res.status(200).json({ products: await attachFlavors(rows[0]) });
   } catch (err) {
     next(err);
   }
@@ -44,7 +107,7 @@ const getAllProducts = async (req, res, next) => {
  */
 const createProduct = async (req, res, next) => {
   try {
-    const { name, description, price, category, image_url, is_available } = req.body;
+    const { name, description, price, category, image_url, is_available, flavors, cost_price } = req.body;
 
     if (!name || price == null || !category) {
       return res.status(400).json({ message: 'Name, price, and category are required.' });
@@ -60,6 +123,10 @@ const createProduct = async (req, res, next) => {
     ]);
 
     const newProductId = rows[0]?.[0]?.new_id;
+    if (newProductId) {
+      if (flavors !== undefined) await saveFlavors(newProductId, flavors);
+      if (cost_price !== undefined) await saveCostPrice(newProductId, cost_price);
+    }
     logger.info('Product created', { id: newProductId, name });
 
     return res.status(201).json({ message: 'Product created.', id: newProductId });
@@ -75,7 +142,7 @@ const createProduct = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, description, price, category, image_url, is_available } = req.body;
+    const { name, description, price, category, image_url, is_available, flavors, cost_price } = req.body;
 
     if (!name || price == null || !category) {
       return res.status(400).json({ message: 'Name, price, and category are required.' });
@@ -90,6 +157,9 @@ const updateProduct = async (req, res, next) => {
       image_url || null,
       is_available !== undefined ? Boolean(is_available) : true,
     ]);
+
+    if (flavors !== undefined) await saveFlavors(parseInt(id, 10), flavors);
+    if (cost_price !== undefined) await saveCostPrice(parseInt(id, 10), cost_price);
 
     logger.info('Product updated', { id });
     return res.status(200).json({ message: 'Product updated.' });
@@ -153,11 +223,49 @@ const getCategories = async (req, res, next) => {
   }
 };
 
+/**
+ * PATCH /api/admin/products/:id/pricing
+ * Admin — quick update for cost_price and/or price.
+ */
+const updatePricing = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { cost_price, price } = req.body;
+    const prodId = parseInt(id, 10);
+
+    const updates = [];
+    const params = [];
+
+    if (cost_price !== undefined && cost_price !== null && cost_price !== '') {
+      updates.push('cost_price = ?');
+      params.push(Math.max(0, parseFloat(cost_price) || 0));
+    }
+    if (price !== undefined && price !== null && price !== '') {
+      updates.push('price = ?');
+      params.push(Math.max(0, parseFloat(price) || 0));
+    }
+
+    if (updates.length > 0) {
+      params.push(prodId);
+      await pool.query(`UPDATE products SET ${updates.join(', ')} WHERE id = ?`, params);
+    }
+
+    const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [prodId]);
+    const updated = (await attachFlavors(rows))[0];
+
+    logger.info('Product pricing updated', { id: prodId, cost_price, price });
+    return res.status(200).json({ message: 'Pricing updated successfully.', product: updated });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getPublicProducts,
   getAllProducts,
   createProduct,
   updateProduct,
+  updatePricing,
   toggleAvailability,
   deleteProduct,
   getCategories,

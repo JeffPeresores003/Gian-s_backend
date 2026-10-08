@@ -3,6 +3,13 @@
 const pool = require('../config/db');
 const logger = require('../config/logger');
 
+/** "Fries" + "Cheese" => "Fries (Cheese)" (idempotent). */
+const flavorLabel = (name, flavor) => {
+  const f = typeof flavor === 'string' ? flavor.trim() : '';
+  if (!f || String(name).endsWith(`(${f})`)) return name;
+  return `${name} (${f})`;
+};
+
 // ─────────────────────────────────────────────────────────────
 // CUSTOMER — POST /api/online-orders
 // ─────────────────────────────────────────────────────────────
@@ -67,7 +74,7 @@ const placeOnlineOrder = async (req, res, next) => {
       await pool.execute('CALL sp_CreateOrderItem(?, ?, ?, ?, ?, ?)', [
         newOrderId,
         item.id ?? item.product_id ?? null,
-        item.name ?? item.product_name,
+        flavorLabel(item.name ?? item.product_name, item.flavor),
         unitPrice,
         qty,
         subtotal,
