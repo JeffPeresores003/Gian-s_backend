@@ -492,4 +492,52 @@ const refundOrder = async (req, res, next) => {
   }
 };
 
-module.exports = { listOrders, getOrder, updateOrder, refundOrder };
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/admin/orders/:id
+// Permanently removes an order (e.g. accidental duplicate punch).
+// order_items and order_audit_log rows are removed via ON DELETE CASCADE,
+// so Cashier history and Sales Reports stop counting it immediately.
+// Body (optional): { reason }
+// ─────────────────────────────────────────────────────────────
+const deleteOrder = async (req, res, next) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ message: 'Invalid order ID.' });
+
+  const reason = String(req.body?.reason || req.query?.reason || '').trim();
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[order]] = await conn.query('SELECT * FROM orders WHERE id = ? FOR UPDATE', [id]);
+    if (!order) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+
+    await conn.query('DELETE FROM order_items WHERE order_id = ?', [id]);
+    await conn.query('DELETE FROM orders WHERE id = ?', [id]);
+    await conn.commit();
+
+    // The audit rows cascade with the order, so keep a permanent trace in the app log.
+    logger.warn('Admin deleted order', {
+      orderId: id,
+      orderNumber: order.order_number,
+      total: Number(order.total_amount),
+      status: order.status,
+      reason: reason || null,
+      by: adminName(req),
+    });
+
+    return res.json({
+      message: `Order ${order.order_number} was permanently deleted.`,
+      deleted: { id, order_number: order.order_number },
+    });
+  } catch (err) {
+    await conn.rollback().catch(() => {});
+    next(err);
+  } finally {
+    conn.release();
+  }
+};
+
+module.exports = { listOrders, getOrder, updateOrder, refundOrder, deleteOrder };

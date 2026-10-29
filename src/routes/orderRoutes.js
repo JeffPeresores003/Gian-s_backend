@@ -13,6 +13,7 @@ const {
   getOrder: adminGetOrder,
   updateOrder: adminUpdateOrder,
   refundOrder: adminRefundOrder,
+  deleteOrder: adminDeleteOrder,
 } = require('../controllers/adminOrderController');
 const { authenticate, requireRole } = require('../middleware/auth');
 
@@ -32,6 +33,7 @@ router.get('/admin/orders', authenticate, requireRole('admin'), adminListOrders)
 router.get('/admin/orders/:id', authenticate, requireRole('admin'), adminGetOrder);
 router.put('/admin/orders/:id', authenticate, requireRole('admin'), adminUpdateOrder);
 router.post('/admin/orders/:id/refund', authenticate, requireRole('admin'), adminRefundOrder);
+router.delete('/admin/orders/:id', authenticate, requireRole('admin'), adminDeleteOrder);
 
 module.exports = router;
 
